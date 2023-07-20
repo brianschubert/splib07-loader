@@ -72,15 +72,16 @@ class Splib07:
 
     def load(
         self,
-        spectra: str,
+        spectra_name: str,
         resampling: str,
         deleted: Literal["sigil", "nan", "drop"] = "nan",
+        format: Literal["onlyspectra", "tuple", "spectral"] = "onlyspectra",
     ):
         """
         Load the given spectra with the specified resampling.
         """
-        if spectra not in self.list_spectra():
-            raise ValueError(f"unknown spectra {spectra}")
+        if spectra_name not in self.list_spectra():
+            raise ValueError(f"unknown spectra {spectra_name}")
 
         if resampling not in self.list_resamplings():
             raise ValueError(f"unknown resampling {resampling}")
@@ -94,13 +95,74 @@ class Splib07:
 
         # TODO direct lookup from file format instead of manually searching.
         for file in _scan_spectra(resampling_dir):
-            if spectra in file.name:
+            if spectra_name in file.name:
                 with file.open("r") as fd:
-                    return _load_asciidata(fd, deleted)
+                    spectra = _load_asciidata(fd, deleted)
+                break
         else:
             # Should never happen.
             raise RuntimeError(
-                f"missing {resampling} resampling for {spectra} - is the splib07 data directory incomplete?"
+                f"missing {resampling} resampling for {spectra_name} - is the splib07 data directory incomplete?"
+            )
+
+        if format == "onlyspectra":
+            return spectra
+
+        if deleted == "drop":
+            # TODO add logic for handling deleted bands when returning wavelengths/bandwidths.
+            raise NotImplementedError
+
+        # TODO test stability.
+        # TODO tidy. First four letters and 2nd to later filename component
+        # appears to uniquely identify the sampling label in the wavelength/bandwidth files.
+        sampling_label = file.name.split("_")[-2][:4]
+        fwhm_candidates = [
+            f
+            for f in resampling_dir.iterdir()
+            if f.name.endswith(".txt")
+            and ("andpass" in f.name or "esolution" in f.name)
+        ]
+        if len(fwhm_candidates) > 1:
+            fwhm_candidates = [f for f in fwhm_candidates if sampling_label in f.name]
+        if len(fwhm_candidates) != 1:
+            raise RuntimeError(
+                f"could not determine bandwidths/FWHMs for {spectra_name}"
+            )
+        with fwhm_candidates[0].open("r") as fd:
+            fwhm = _load_asciidata(fd, deleted)
+
+        wavelength_candidates = [
+            f
+            for f in resampling_dir.iterdir()
+            if f.name.endswith(".txt") and "avelength" in f.name
+        ]
+        if len(wavelength_candidates) > 1:
+            wavelength_candidates = [
+                f for f in wavelength_candidates if sampling_label in f.name
+            ]
+        if len(wavelength_candidates) != 1:
+            raise RuntimeError(f"could not determine wavelengths for {spectra_name}")
+        with wavelength_candidates[0].open("r") as fd:
+            wavelengths = _load_asciidata(fd, deleted)
+
+        if format == "tuple":
+            return spectra, wavelengths, fwhm
+
+        if format == "spectral":
+            try:
+                import spectral.io.envi
+            except ImportError as ex:
+                raise ValueError(
+                    "unable to use spectral format - spectral package could not be loaded"
+                ) from ex
+            return spectral.io.envi.SpectralLibrary(
+                data=spectra.reshape(1, -1),
+                header={
+                    "wavelength": wavelengths,
+                    "fwhm": fwhm,
+                    "wavelength units": "Micrometers",
+                    "spectra names": [spectra_name],
+                },
             )
 
     def __repr__(self) -> str:
@@ -115,7 +177,8 @@ def _scan_spectra(path: _VirtualPath) -> Iterable[_VirtualPath]:
 
 
 def _load_asciidata(
-    file: pathlib.Path | io.IOBase, deleted: Literal["sigil", "nan", "drop"] = "nan"
+    file: pathlib.Path | io.IOBase,
+    deleted: Literal["sigil", "nan", "drop"] = "nan",
 ) -> np.ndarray:
     """Load array from ASCIIdata file."""
     data = np.loadtxt(file, skiprows=1)
