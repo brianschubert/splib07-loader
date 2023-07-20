@@ -1,2 +1,6 @@
 # IDEs
 /.idea/
+
+# Misc
+/.local-notes/
+/notebooks/scratch*.ipynb
