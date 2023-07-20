@@ -50,3 +50,7 @@ profile = "black"
 # mypy config.
 [tool.mypy]
 strict = true
+
+[[tool.mypy.overrides]]
+module = "spectral.*"
+ignore_missing_imports = true
