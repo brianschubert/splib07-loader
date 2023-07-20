@@ -15,6 +15,11 @@ typing-extensions = "^4.7.1"
 nptyping = "^2.5.0"
 spectral = { version = "^0.23.1", optional = true }
 
+[tool.poetry.group.dev.dependencies]
+black = "^23.7.0"
+isort = "^5.12.0"
+mypy = "^1.4.1"
+
 [tool.poetry.extras]
 spectral = ["spectral"]
 
@@ -25,3 +30,23 @@ nbqa = "^1.7.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+# Black config.
+[tool.black]
+# How many characters per line to allow.
+# https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#line-length
+line-length = 88
+# Don't skip skip temporary sanity checks.
+safe = true
+# Python versions that should be supported by Black's output.
+target-version = ["py39"]
+# Set to true to preview style changes that may be added in black's next major release.
+preview = false
+
+# isort config.
+[tool.isort]
+profile = "black"
+
+# mypy config.
+[tool.mypy]
+strict = true

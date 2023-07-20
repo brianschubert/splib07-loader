@@ -203,7 +203,7 @@ def _usgs_delated_mask(arr: np.ndarray) -> np.ndarray:
     return _mask_in_range(arr, *_DeletedChannelRange)
 
 
-def _assert_splib07_path(path: pathlib.Path) -> None:
+def _assert_splib07_path(path: _VirtualPath) -> None:
     """
     Validate that the given directory contains Spectral Library Version 7 files.
     """
