@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import io
 import pathlib
 import zipfile
 from functools import cache
-from typing import Final, Iterable, Literal
-from typing_extensions import TypeAlias
+from typing import TYPE_CHECKING, Final, Iterable, Literal, TextIO
 
 import numpy as np
+from nptyping import Bool, Float, NDArray
+from typing_extensions import TypeAlias
+
+if TYPE_CHECKING:
+    import spectral.io.envi
 
 # Distribution version, PEP-440 compatible.
 # Should be kept in sync with 'tool.poetry.version' in pyproject.toml.
@@ -26,6 +29,8 @@ _RESAMPLING_FIXED_NAMES: Final = {
 
 _VirtualPath: TypeAlias = "pathlib.Path | zipfile.Path"
 
+_FloatArray: TypeAlias = NDArray[Literal["*"], Float]
+
 
 class Splib07:
     """
@@ -38,6 +43,7 @@ class Splib07:
     """
 
     def __init__(self, root: pathlib.Path) -> None:
+        path: _VirtualPath
         if zipfile.is_zipfile(root):
             path = zipfile.Path(root, at="")
         else:
@@ -76,6 +82,10 @@ class Splib07:
         resampling: str,
         deleted: Literal["sigil", "nan", "drop"] = "nan",
         format: Literal["onlyspectra", "tuple", "spectral"] = "onlyspectra",
+    ) -> (
+        _FloatArray
+        | tuple[_FloatArray, _FloatArray, _FloatArray]
+        | spectral.io.envi.SpectralLibrary
     ):
         """
         Load the given spectra with the specified resampling.
@@ -97,7 +107,7 @@ class Splib07:
         for file in _scan_spectra(resampling_dir):
             if spectra_name in file.name:
                 with file.open("r") as fd:
-                    spectra = _load_asciidata(fd, deleted)
+                    spectra = _load_asciidata(fd, deleted)  # type: ignore
                 break
         else:
             # Should never happen.
@@ -129,7 +139,7 @@ class Splib07:
                 f"could not determine bandwidths/FWHMs for {spectra_name}"
             )
         with fwhm_candidates[0].open("r") as fd:
-            fwhm = _load_asciidata(fd, deleted)
+            fwhm = _load_asciidata(fd, deleted)  # type: ignore
 
         wavelength_candidates = [
             f
@@ -143,7 +153,7 @@ class Splib07:
         if len(wavelength_candidates) != 1:
             raise RuntimeError(f"could not determine wavelengths for {spectra_name}")
         with wavelength_candidates[0].open("r") as fd:
-            wavelengths = _load_asciidata(fd, deleted)
+            wavelengths = _load_asciidata(fd, deleted)  # type: ignore
 
         if format == "tuple":
             return spectra, wavelengths, fwhm
@@ -177,9 +187,9 @@ def _scan_spectra(path: _VirtualPath) -> Iterable[_VirtualPath]:
 
 
 def _load_asciidata(
-    file: pathlib.Path | io.IOBase,
+    file: pathlib.Path | TextIO,
     deleted: Literal["sigil", "nan", "drop"] = "nan",
-) -> np.ndarray:
+) -> _FloatArray:
     """Load array from ASCIIdata file."""
     data = np.loadtxt(file, skiprows=1)
 
@@ -198,7 +208,7 @@ def _load_asciidata(
     raise ValueError(f"unknown deleted behavior: {deleted}")
 
 
-def _usgs_delated_mask(arr: np.ndarray) -> np.ndarray:
+def _usgs_delated_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
     """Generate mask of bands marked as deleted in the given array."""
     return _mask_in_range(arr, *_DeletedChannelRange)
 
@@ -221,7 +231,9 @@ def _assert_splib07_path(path: _VirtualPath) -> None:
         )
 
 
-def _mask_in_range(arr: np.ndarray, start: float, end: float) -> np.ndarray:
+def _mask_in_range(
+    arr: _FloatArray, start: float, end: float
+) -> NDArray[Literal["*"], Bool]:
     """
     Return mask that is True for all entries that are in the range [start, end].
     """
