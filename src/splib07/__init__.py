@@ -134,9 +134,12 @@ class Splib07:
             raise NotImplementedError
 
         # TODO test stability.
-        # TODO tidy. First four letters and 2nd to later filename component
-        # appears to uniquely identify the sampling label in the wavelength/bandwidth files.
+        # TODO tidy wavelength matching hack.
+        # We use the first four letters of the second to last component in the spectrum's
+        # filename identify its associated wavelength/bandwidth files.
         sampling_label = file.name.split("_")[-2][:4]
+
+        # Attempt to locate the associated FWHM bandwidths file.
         fwhm_candidates = [
             f
             for f in resampling_dir.iterdir()
@@ -152,6 +155,7 @@ class Splib07:
         with fwhm_candidates[0].open("r") as fd:
             fwhm = _load_asciidata(fd, deleted)  # type: ignore
 
+        # Attempt to locate the associated wavelengths file.
         wavelength_candidates = [
             f
             for f in resampling_dir.iterdir()
@@ -186,11 +190,14 @@ class Splib07:
                 },
             )
 
+        raise ValueError(f"unknown format {format}")
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.root!r})"
 
 
 def _scan_spectra(path: _VirtualPath) -> Iterable[_VirtualPath]:
+    """Iterate the spectrum files in the specified resampling directory."""
     for directory in path.iterdir():
         if not directory.name.startswith("Chapter"):
             continue
