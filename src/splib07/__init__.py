@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import io
 import pathlib
+import zipfile
 from functools import cache
-from typing import Final, Literal
+from typing import Final, Iterable, Literal
+from typing_extensions import TypeAlias
 
 import numpy as np
 
@@ -19,32 +24,36 @@ _RESAMPLING_FIXED_NAMES: Final = {
     "oversampled": "splib07b",
 }
 
+_VirtualPath: TypeAlias = "pathlib.Path | zipfile.Path"
+
 
 class Splib07:
     """
     Interface to a local archive of the USGS Spectral Library Version 7.
     """
 
-    root_dir: pathlib.Path
+    root: _VirtualPath
     """
     Path to directory containing the extracted USGS Spectral Library Version 7 files.
     """
 
-    def __init__(self, root_dir: pathlib.Path) -> None:
-        _assert_splib07_path(root_dir)
-        self.root_dir = root_dir
+    def __init__(self, root: pathlib.Path) -> None:
+        if zipfile.is_zipfile(root):
+            path = zipfile.Path(root, at="")
+        else:
+            path = root
+
+        _assert_splib07_path(path)
+        self.root = path
 
     @cache
     def list_spectra(self) -> list[str]:
         """
         Return list of all spectra container in the library.
         """
-        measured_dir = self.root_dir.joinpath("ASCIIdata").joinpath(
-            "ASCIIdata_splib07a"
-        )
+        measured_dir = self.root.joinpath("ASCIIdata").joinpath("ASCIIdata_splib07a")
         spectra_basenames = [
-            "_".join(f.name.split("_")[1:-2])
-            for f in measured_dir.glob("Chapter*/*.txt")
+            "_".join(f.name.split("_")[1:-2]) for f in _scan_spectra(measured_dir)
         ]
         spectra_basenames.sort()
         return spectra_basenames
@@ -56,7 +65,8 @@ class Splib07:
         """
         named_resamplings = [
             d.name.removeprefix("ASCIIdata_splib07b_")
-            for d in self.root_dir.joinpath("ASCIIdata").glob("ASCIIdata_splib07*/")
+            for d in self.root.joinpath("ASCIIdata").iterdir()
+            if d.name.split("ASCIIdata_splib07")
         ]
         return list(_RESAMPLING_FIXED_NAMES.keys()) + named_resamplings
 
@@ -78,14 +88,15 @@ class Splib07:
         resampling_label = _RESAMPLING_FIXED_NAMES.get(
             resampling, f"splib07b_{resampling}"
         )
-        resampling_dir = self.root_dir.joinpath("ASCIIdata").joinpath(
+        resampling_dir = self.root.joinpath("ASCIIdata").joinpath(
             f"ASCIIdata_{resampling_label}"
         )
 
         # TODO direct lookup from file format instead of manually searching.
-        for file in resampling_dir.glob("Chapter*/*.txt"):
+        for file in _scan_spectra(resampling_dir):
             if spectra in file.name:
-                return _load_asciidata(file, deleted)
+                with file.open("r") as fd:
+                    return _load_asciidata(fd, deleted)
         else:
             # Should never happen.
             raise RuntimeError(
@@ -93,11 +104,18 @@ class Splib07:
             )
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.root_dir!r})"
+        return f"{self.__class__.__name__}({self.root!r})"
+
+
+def _scan_spectra(path: _VirtualPath) -> Iterable[_VirtualPath]:
+    for directory in path.iterdir():
+        if not directory.name.startswith("Chapter"):
+            continue
+        yield from directory.iterdir()
 
 
 def _load_asciidata(
-    file: pathlib.Path, deleted: Literal["sigil", "nan", "drop"] = "nan"
+    file: pathlib.Path | io.IOBase, deleted: Literal["sigil", "nan", "drop"] = "nan"
 ) -> np.ndarray:
     """Load array from ASCIIdata file."""
     data = np.loadtxt(file, skiprows=1)
