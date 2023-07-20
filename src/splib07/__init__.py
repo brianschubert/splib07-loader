@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 import zipfile
 from functools import cache
 from typing import TYPE_CHECKING, Final, Iterable, Literal, TextIO
@@ -55,7 +56,7 @@ class Splib07:
     @cache
     def list_spectra(self) -> list[str]:
         """
-        Return list of all spectra container in the library.
+        Return list of all available spectra names.
         """
         measured_dir = self.root.joinpath("ASCIIdata").joinpath("ASCIIdata_splib07a")
         spectra_basenames = [
@@ -67,7 +68,7 @@ class Splib07:
     @cache
     def list_resamplings(self) -> list[str]:
         """
-        Return list of all generated resamplings of the spectra.
+        Return list of all available resamplings.
         """
         named_resamplings = [
             d.name.removeprefix("ASCIIdata_splib07b_")
@@ -75,6 +76,16 @@ class Splib07:
             if d.name.startswith("ASCIIdata_splib07b_")
         ]
         return list(_RESAMPLING_FIXED_NAMES.keys()) + named_resamplings
+
+    def search_spectra(self, regex: str | re.Pattern) -> list[str]:
+        """
+        Return list of all spectra names that match the given pattern.
+        """
+        if isinstance(regex, re.Pattern):
+            pattern = regex
+        else:
+            pattern = re.compile(regex, re.IGNORECASE)
+        return [s for s in self.list_spectra() if pattern.search(s) is not None]
 
     def load(
         self,
@@ -88,7 +99,7 @@ class Splib07:
         | spectral.io.envi.SpectralLibrary
     ):
         """
-        Load the given spectra with the specified resampling.
+        Load the given spectrum with the specified resampling.
         """
         if spectra_name not in self.list_spectra():
             raise ValueError(f"unknown spectra {spectra_name}")
