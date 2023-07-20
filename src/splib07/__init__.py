@@ -66,7 +66,7 @@ class Splib07:
         named_resamplings = [
             d.name.removeprefix("ASCIIdata_splib07b_")
             for d in self.root.joinpath("ASCIIdata").iterdir()
-            if d.name.split("ASCIIdata_splib07")
+            if d.name.startswith("ASCIIdata_splib07b_")
         ]
         return list(_RESAMPLING_FIXED_NAMES.keys()) + named_resamplings
 
