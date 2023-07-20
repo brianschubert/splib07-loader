@@ -1995,6 +1995,20 @@ files = [
 ]
 
 [[package]]
+name = "spectral"
+version = "0.23.1"
+description = "Spectral Python (SPy) is a Python module for hyperspectral image processing."
+optional = true
+python-versions = "*"
+files = [
+    {file = "spectral-0.23.1-py3-none-any.whl", hash = "sha256:07d04da64ab51f789bd280c51d16a4aa7f7acf774bdd88eb95e600eeec3db664"},
+    {file = "spectral-0.23.1.tar.gz", hash = "sha256:e1822273525ef3583b27a966226d55afe09e7d29a7236cfcd8bc0dfb1f968fc2"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[[package]]
 name = "stack-data"
 version = "0.6.2"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -2229,7 +2243,10 @@ files = [
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-ignore-flaky", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
 
+[extras]
+spectral = ["spectral"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "730f1e0059bb5d3e3068e3312671eee6b6347ebfd82f484c6574e28f606a68c0"
+content-hash = "1edacda5b4c8b29338648de605f1cc08baa0f7c901ab0df39cfe3de733237a5e"

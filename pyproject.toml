@@ -13,6 +13,10 @@ python = "^3.9"
 numpy = "^1.25.1"
 typing-extensions = "^4.7.1"
 nptyping = "^2.5.0"
+spectral = { version = "^0.23.1", optional = true }
+
+[tool.poetry.extras]
+"spectral" = ["spectral"]
 
 [tool.poetry.group.nb.dependencies]
 jupyter = "^1.0.0"
