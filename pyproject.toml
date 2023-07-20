@@ -10,6 +10,13 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
+numpy = "^1.25.1"
+typing-extensions = "^4.7.1"
+nptyping = "^2.5.0"
+
+[tool.poetry.group.nb.dependencies]
+jupyter = "^1.0.0"
+nbqa = "^1.7.0"
 
 [build-system]
 requires = ["poetry-core"]
