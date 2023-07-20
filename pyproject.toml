@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "splib07-loader"
+version = "0.1.0-dev"
+description = ""
+authors = ["Brian Schubert <schubert.b@northeastern.edu>"]
+readme = "README.md"
+packages = [
+    { from = "src", include = "splib07" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
