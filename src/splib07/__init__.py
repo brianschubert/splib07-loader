@@ -160,7 +160,7 @@ class Splib07:
                 header={
                     "wavelength": wavelengths,
                     "fwhm": fwhm,
-                    "wavelength units": "Micrometers",
+                    "wavelength units": "micrometer",
                     "spectra names": [spectra_name],
                 },
             )
