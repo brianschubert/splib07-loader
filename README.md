@@ -2,7 +2,7 @@
 
 Tools for loading spectra from a local archive of the [USGS Spectral Library Version 7](https://pubs.er.usgs.gov/publication/ds1035).
 
-The dataset release for USGS Spectral Library Version 7 can be downlaoded from the USGS ScienceBase data server at https://dx.doi.org/10.5066/F7RR1WDJ.
+The dataset release for USGS Spectral Library Version 7 can be downloaded from the USGS ScienceBase data server at https://dx.doi.org/10.5066/F7RR1WDJ.
 
 
 ## Credits
