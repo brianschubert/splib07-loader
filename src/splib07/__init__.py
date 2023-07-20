@@ -196,7 +196,7 @@ def _load_asciidata(
     if deleted == "sigil":
         return data
 
-    mask = _usgs_delated_mask(data)
+    mask = _usgs_deleted_mask(data)
 
     if deleted == "drop":
         return data[~mask]
@@ -208,7 +208,7 @@ def _load_asciidata(
     raise ValueError(f"unknown deleted behavior: {deleted}")
 
 
-def _usgs_delated_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
+def _usgs_deleted_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
     """Generate mask of bands marked as deleted in the given array."""
     return _mask_in_range(arr, *_DeletedChannelRange)
 
