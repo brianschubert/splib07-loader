@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 # Distribution version, PEP-440 compatible.
 # Should be kept in sync with 'tool.poetry.version' in pyproject.toml.
-__version__ = "0.2.0"
+__version__ = "0.3.0-dev"
 
 # Value used to signify a deleted chanel.
 # DS1035 p.19
