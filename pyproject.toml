@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "splib07-loader"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["Brian Schubert <schubert.b@northeastern.edu>"]
 readme = "README.md"
@@ -13,7 +13,7 @@ python = "^3.9"
 numpy = "^1.25.1"
 typing-extensions = "^4.7.1"
 nptyping = "^2.5.0"
-spectral = { version = "^0.23.1", optional = true }
+spectral = "^0.23.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
@@ -21,8 +21,6 @@ isort = "^5.12.0"
 mypy = "^1.4.1"
 pytest = "^7.4.0"
 
-[tool.poetry.extras]
-spectral = ["spectral"]
 
 [tool.poetry.group.nb.dependencies]
 jupyter = "^1.0.0"
