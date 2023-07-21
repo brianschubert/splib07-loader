@@ -145,12 +145,14 @@ class Splib07:
             for f in resampling_dir.iterdir()
             if f.name.endswith(".txt")
             and ("andpass" in f.name or "esolution" in f.name)
+            and not f.name.endswith("_nm.txt")
         ]
         if len(fwhm_candidates) > 1:
             fwhm_candidates = [f for f in fwhm_candidates if sampling_label in f.name]
         if len(fwhm_candidates) != 1:
             raise RuntimeError(
-                f"could not determine bandwidths/FWHMs for {spectra_name}"
+                f"could not determine bandwidths/FWHMs for {spectra_name} "
+                f"with resampling {resample_source}"
             )
         with fwhm_candidates[0].open("r") as fd:
             fwhm = _load_asciidata(fd, deleted)  # type: ignore
@@ -159,14 +161,31 @@ class Splib07:
         wavelength_candidates = [
             f
             for f in resampling_dir.iterdir()
-            if f.name.endswith(".txt") and "avelength" in f.name
+            if f.name.endswith(".txt")
+            and ("avelength" in f.name or "aves" in f.name)
+            and not f.name.endswith("_SRFs.txt")
+            and not f.name.endswith("Function.txt")
+            and not f.name.endswith("Functions.txt")
         ]
         if len(wavelength_candidates) > 1:
             wavelength_candidates = [
                 f for f in wavelength_candidates if sampling_label in f.name
             ]
         if len(wavelength_candidates) != 1:
-            raise RuntimeError(f"could not determine wavelengths for {spectra_name}")
+            # Special case - ASD{HR,NG} in splib07{a,b}
+            if sampling_label.startswith("ASD"):
+                wavelength_candidates = [
+                    resampling_dir.joinpath(
+                        "splib07b_Wavelengths_ASDFR_0.35-2.5microns_2151ch.txt"
+                        if resample_source == "oversampled"
+                        else "splib07a_Wavelengths_ASD_0.35-2.5_microns_2151_ch.txt"
+                    )
+                ]
+            else:
+                raise RuntimeError(
+                    f"could not determine wavelengths for {spectra_name} "
+                    f"with resampling {resample_source}"
+                )
         with wavelength_candidates[0].open("r") as fd:
             wavelengths = _load_asciidata(fd, deleted)  # type: ignore
 
