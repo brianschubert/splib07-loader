@@ -145,7 +145,7 @@ class Splib07:
         deleted: Literal["sigil", "nan", "drop"] = "nan",
     ) -> Spectrum:
         resampling_label = _RESAMPLING_FIXED_NAMES.get(
-            resampling, f"splib07b_{resampling}"
+            resample_source, f"splib07b_{resample_source}"
         )
         resampling_dir = self.root.joinpath("ASCIIdata").joinpath(
             f"ASCIIdata_{resampling_label}"
