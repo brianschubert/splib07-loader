@@ -158,6 +158,9 @@ class Splib07:
         if not isinstance(resample, str):
             loaded_spectrum = _resample(loaded_spectrum, resample)
 
+        if format == "raw":
+            return loaded_spectrum
+
         if format == "spectral":
             return spectral.io.envi.SpectralLibrary(
                 data=loaded_spectrum.spectrum.reshape(1, -1),
@@ -169,7 +172,7 @@ class Splib07:
                 },
             )
 
-        return loaded_spectrum
+        raise ValueError(f"unknown format - {format}")
 
     def _load(
         self,
