@@ -85,7 +85,7 @@ class Splib07:
         ]
         return list(_RESAMPLING_FIXED_NAMES.keys()) + named_resamplings
 
-    def search_spectra(self, regex: str | re.Pattern) -> list[str]:
+    def search_spectra(self, regex: str | re.Pattern[str]) -> list[str]:
         """
         Return list of all spectra names that match the given pattern.
         """
