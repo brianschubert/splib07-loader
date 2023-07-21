@@ -51,12 +51,12 @@ class Splib07:
     Path to directory containing the extracted USGS Spectral Library Version 7 files.
     """
 
-    def __init__(self, root: pathlib.Path) -> None:
+    def __init__(self, root: str | pathlib.Path) -> None:
         path: _VirtualPath
         if zipfile.is_zipfile(root):
             path = zipfile.Path(root, at="")
         else:
-            path = root
+            path = pathlib.Path(root)
 
         _assert_splib07_path(path)
         self.root = path
