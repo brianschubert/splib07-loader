@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import pathlib
 import re
 import zipfile
@@ -8,7 +9,6 @@ from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO
 
 import numpy as np
 import spectral
-import spectral.algorithms.resampling
 from nptyping import Bool, Float, NDArray
 from typing_extensions import TypeAlias
 
@@ -293,8 +293,12 @@ def _resample(
     if isinstance(to, tuple):
         target_wavelengths, target_fwhm = to
     else:
+        # Need to use importlib instead of normal import since spectral seems to shadow
+        # some submodules with module attributes.
+        resampling = importlib.import_module("spectral.algorithms.resampling")
+
         target_wavelengths = to
-        target_fwhm = spectral.algorithms.resampling.build_fwhm(to)
+        target_fwhm = resampling.build_fwhm(to)
 
     resampler = spectral.BandResampler(
         centers1=spectrum.wavelengths,
