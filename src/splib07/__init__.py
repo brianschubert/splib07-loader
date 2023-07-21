@@ -5,7 +5,7 @@ import pathlib
 import re
 import zipfile
 from functools import cache
-from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO
+from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO, overload
 
 import numpy as np
 import spectral
@@ -95,10 +95,43 @@ class Splib07:
             pattern = re.compile(regex, re.IGNORECASE)
         return [s for s in self.list_spectra() if pattern.search(s) is not None]
 
+    @overload
     def load(
         self,
         spectra_name: str,
         resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        *,
+        deleted: Literal["sigil", "nan", "drop"] = ...,
+    ) -> Spectrum:
+        ...
+
+    @overload
+    def load(
+        self,
+        spectra_name: str,
+        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        *,
+        deleted: Literal["sigil", "nan", "drop"] = ...,
+        format: Literal["raw"] = ...,
+    ) -> Spectrum:
+        ...
+
+    @overload
+    def load(
+        self,
+        spectra_name: str,
+        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        *,
+        deleted: Literal["sigil", "nan", "drop"] = ...,
+        format: Literal["spectral"] = ...,
+    ) -> spectral.io.envi.SpectralLibrary:
+        ...
+
+    def load(
+        self,
+        spectra_name: str,
+        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        *,
         deleted: Literal["sigil", "nan", "drop"] = "nan",
         format: Literal["raw", "spectral"] = "raw",
     ) -> Spectrum | spectral.io.envi.SpectralLibrary:
