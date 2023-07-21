@@ -4,9 +4,11 @@ import pathlib
 import re
 import zipfile
 from functools import cache
-from typing import TYPE_CHECKING, Final, Iterable, Literal, TextIO
+from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO
 
 import numpy as np
+import spectral
+import spectral.algorithms.resampling
 from nptyping import Bool, Float, NDArray
 from typing_extensions import TypeAlias
 
@@ -31,6 +33,12 @@ _RESAMPLING_FIXED_NAMES: Final = {
 _VirtualPath: TypeAlias = "pathlib.Path | zipfile.Path"
 
 _FloatArray: TypeAlias = NDArray[Literal["*"], Float]
+
+
+class Spectrum(NamedTuple):
+    spectrum: _FloatArray
+    wavelengths: _FloatArray
+    fwhm: _FloatArray
 
 
 class Splib07:
@@ -90,23 +98,52 @@ class Splib07:
     def load(
         self,
         spectra_name: str,
-        resampling: str,
+        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
         deleted: Literal["sigil", "nan", "drop"] = "nan",
-        format: Literal["onlyspectra", "tuple", "spectral"] = "onlyspectra",
-    ) -> (
-        _FloatArray
-        | tuple[_FloatArray, _FloatArray, _FloatArray]
-        | spectral.io.envi.SpectralLibrary
-    ):
+        format: Literal["raw", "spectral"] = "raw",
+    ) -> Spectrum | spectral.io.envi.SpectralLibrary:
         """
         Load the given spectrum with the specified resampling.
         """
         if spectra_name not in self.list_spectra():
             raise ValueError(f"unknown spectra {spectra_name}")
 
-        if resampling not in self.list_resamplings():
-            raise ValueError(f"unknown resampling {resampling}")
+        if isinstance(resample, str):
+            resample_source = resample
+        else:
+            resample_source = "oversampled"
 
+        if resample_source not in self.list_resamplings():
+            raise ValueError(f"unknown resampling {resample_source}")
+
+        if deleted == "drop":
+            # TODO add logic for handling deleted bands when returning wavelengths/bandwidths.
+            raise NotImplementedError
+
+        loaded_spectrum = self._load(spectra_name, resample_source, deleted)
+
+        if not isinstance(resample, str):
+            loaded_spectrum = _resample(loaded_spectrum, resample)
+
+        if format == "spectral":
+            return spectral.io.envi.SpectralLibrary(
+                data=loaded_spectrum.spectrum.reshape(1, -1),
+                header={
+                    "wavelength": loaded_spectrum.wavelengths,
+                    "fwhm": loaded_spectrum.fwhm,
+                    "wavelength units": "micrometer",
+                    "spectra names": [spectra_name],
+                },
+            )
+
+        return loaded_spectrum
+
+    def _load(
+        self,
+        spectra_name: str,
+        resample_source: str,
+        deleted: Literal["sigil", "nan", "drop"] = "nan",
+    ) -> Spectrum:
         resampling_label = _RESAMPLING_FIXED_NAMES.get(
             resampling, f"splib07b_{resampling}"
         )
@@ -123,15 +160,8 @@ class Splib07:
         else:
             # Should never happen.
             raise RuntimeError(
-                f"missing {resampling} resampling for {spectra_name} - is the splib07 data directory incomplete?"
+                f"missing {resample_source} resampling for {spectra_name} - is the splib07 data directory incomplete?"
             )
-
-        if format == "onlyspectra":
-            return spectra
-
-        if deleted == "drop":
-            # TODO add logic for handling deleted bands when returning wavelengths/bandwidths.
-            raise NotImplementedError
 
         # TODO test stability.
         # TODO tidy wavelength matching hack.
@@ -189,27 +219,7 @@ class Splib07:
         with wavelength_candidates[0].open("r") as fd:
             wavelengths = _load_asciidata(fd, deleted)  # type: ignore
 
-        if format == "tuple":
-            return spectra, wavelengths, fwhm
-
-        if format == "spectral":
-            try:
-                import spectral.io.envi
-            except ImportError as ex:
-                raise ValueError(
-                    "unable to use spectral format - spectral package could not be loaded"
-                ) from ex
-            return spectral.io.envi.SpectralLibrary(
-                data=spectra.reshape(1, -1),
-                header={
-                    "wavelength": wavelengths,
-                    "fwhm": fwhm,
-                    "wavelength units": "micrometer",
-                    "spectra names": [spectra_name],
-                },
-            )
-
-        raise ValueError(f"unknown format {format}")
+        return Spectrum(spectra, wavelengths, fwhm)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.root!r})"
@@ -275,3 +285,22 @@ def _mask_in_range(
     Return mask that is True for all entries that are in the range [start, end].
     """
     return (start <= arr) & (arr <= end)
+
+
+def _resample(
+    spectrum: Spectrum, to: _FloatArray | tuple[_FloatArray, _FloatArray]
+) -> Spectrum:
+    if isinstance(to, tuple):
+        target_wavelengths, target_fwhm = to
+    else:
+        target_wavelengths = to
+        target_fwhm = spectral.algorithms.resampling.build_fwhm(to)
+
+    resampler = spectral.BandResampler(
+        centers1=spectrum.wavelengths,
+        centers2=target_wavelengths,
+        fwhm1=spectrum.fwhm,
+        fwhm2=target_fwhm,
+    )
+
+    return Spectrum(resampler(spectrum.spectrum), target_wavelengths, target_fwhm)
