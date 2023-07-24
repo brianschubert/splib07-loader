@@ -1,7 +1,9 @@
+import importlib.metadata
+
 from ._loader import Spectrum, Splib07
 
 # Distribution version, PEP-440 compatible.
-# Should be kept in sync with 'tool.poetry.version' in pyproject.toml.
-__version__ = "0.3.0-dev"
+# Automatically retrieved from installed distribution metadata.
+__version__ = importlib.metadata.version("splib07-loader")
 
 __all__ = ["Spectrum", "Splib07"]
