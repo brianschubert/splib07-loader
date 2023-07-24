@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "splib07-loader"
-version = "0.2.0"
+version = "0.3.0"
 description = ""
 authors = ["Brian Schubert <schubert.b@northeastern.edu>"]
 readme = "README.md"
