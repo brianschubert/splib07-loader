@@ -297,9 +297,6 @@ def _assert_splib07_path(path: _VirtualPath) -> None:
     """
     Validate that the given directory contains Spectral Library Version 7 files.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"no such directory or archive file: '{path}'")
-
     # TODO check for existence of other key files.
     expected_subdirs = ["ASCIIdata"]
     actual_contents = [entry.name for entry in path.iterdir()]
