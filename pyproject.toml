@@ -54,3 +54,7 @@ strict = true
 [[tool.mypy.overrides]]
 module = "spectral.*"
 ignore_missing_imports = true
+
+# pytest config.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
