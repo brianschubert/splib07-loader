@@ -15,6 +15,7 @@ numpy = "^1.25.1"
 typing-extensions = "^4.7.1"
 nptyping = "^2.5.0"
 spectral = "^0.23.1"
+beautifulsoup4 = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
