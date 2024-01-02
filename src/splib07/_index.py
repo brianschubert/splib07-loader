@@ -87,15 +87,25 @@ class _SpectrumEntry(NamedTuple):
     An entry (row) in an index datatable.
     """
 
+    # some entries are missing spectra, error plots, or range plots
+    # e.g. Landsat8 Ilmenite HS231.3B NIC4bcu
+
     name: _SpectrumIdentifier
     description: pathlib.PurePath
-    spectrum_asciidata: pathlib.PurePath
+    spectrum_asciidata: pathlib.PurePath | None
     error_asciidata: pathlib.PurePath | None
     wavelengths_asciidata: pathlib.PurePath
     bandpass_asciidata: pathlib.PurePath
-    range_plot: pathlib.PurePath
+    range_plot: pathlib.PurePath | None
     wavelength_plot: pathlib.PurePath
     bandpass_plot: pathlib.PurePath
+    extra_range_plots: tuple[
+        pathlib.PurePath | None,
+        pathlib.PurePath | None,
+        pathlib.PurePath | None,
+        pathlib.PurePath | None,
+        pathlib.PurePath | None,
+    ] | None
 
 
 class Splib07Index:
@@ -171,9 +181,11 @@ def _read_datatable(
 
     chapter_indices = _SamplingIndex(*({} for _ in range(len(Chapter))))
 
-    def extract_link_path(cell) -> pathlib.PurePath | None:
+    def extract_link_path(cell, missing_ok: bool) -> pathlib.PurePath | None:
         anchor = cell.find("a")
         if anchor is None:
+            if not missing_ok:
+                raise ValueError(f"missing anchor in cell {cell}")
             return None
         return pathlib.PurePath(anchor["href"])
 
@@ -186,32 +198,44 @@ def _read_datatable(
         for row in itertools.islice(all_rows, 4, None):
             data = row.find_all("td")
 
-            [
-                title,
-                description,
-                spectrum_asciidata,
-                error_asciidata,
-                wavelengths_asciidata,
-                bandpass_asciidata,
-                raneg_plot,
-                *extra_plots,
-                wavelength_plot,
-                bandpass_plot,
-            ] = data
+            try:
+                [
+                    title,
+                    description,
+                    spectrum_asciidata,
+                    error_asciidata,
+                    wavelengths_asciidata,
+                    bandpass_asciidata,
+                    range_plot,
+                    *extra_plots,
+                    wavelength_plot,
+                    bandpass_plot,
+                ] = data
 
-            spectrum_identifier = re.sub(_SPACES_PATTERN, "_", title.text)
+                spectrum_identifier = re.sub(_SPACES_PATTERN, "_", title.text)
 
-            current_index[spectrum_identifier] = _SpectrumEntry(
-                name=spectrum_identifier,
-                description=extract_link_path(description),
-                spectrum_asciidata=extract_link_path(spectrum_asciidata),
-                error_asciidata=extract_link_path(error_asciidata),
-                wavelengths_asciidata=extract_link_path(wavelengths_asciidata),
-                bandpass_asciidata=extract_link_path(bandpass_asciidata),
-                range_plot=extract_link_path(raneg_plot),
-                wavelength_plot=extract_link_path(wavelength_plot),
-                bandpass_plot=extract_link_path(bandpass_plot),
-            )
+                current_index[spectrum_identifier] = _SpectrumEntry(
+                    name=spectrum_identifier,
+                    description=extract_link_path(description, False),
+                    spectrum_asciidata=extract_link_path(spectrum_asciidata, True),
+                    error_asciidata=extract_link_path(error_asciidata, True),
+                    wavelengths_asciidata=extract_link_path(
+                        wavelengths_asciidata, False
+                    ),
+                    bandpass_asciidata=extract_link_path(bandpass_asciidata, False),
+                    range_plot=extract_link_path(range_plot, True),
+                    wavelength_plot=extract_link_path(wavelength_plot, False),
+                    bandpass_plot=extract_link_path(bandpass_plot, False),
+                    extra_range_plots=tuple(
+                        extract_link_path(p, True) for p in extra_plots
+                    )
+                    if extra_plots
+                    else None,
+                )
+            except ValueError as ex:
+                raise ValueError(
+                    f"""failed to interpret datatable row {data}"""
+                ) from ex
 
     return chapter_indices
 
