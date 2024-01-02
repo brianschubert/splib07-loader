@@ -1,7 +1,42 @@
-from splib07._index import Sampling, Splib07Index
+import pathlib
+import zipfile
+from typing import Final
+
+import pytest
+
+import splib07._index as splib07_index
+
+_EXPECTED_CHAPTER_LENGTHS: Final = (1275, 208, 11, 23, 359, 289, 285)
 
 
-def test_load_index(library_path) -> None:
-    index = Splib07Index(library_path)
+@pytest.fixture(scope="module")
+def generated_index(library_path) -> splib07_index.Splib07Index:
+    return splib07_index.Splib07Index.generate_index(library_path)
 
-    assert len(index._sampling_datatables) == len(Sampling)
+
+def test_resolve_zip_path_identifies_zip(library_path) -> None:
+    resolved_path = splib07_index._resolve_zip_path(library_path)
+
+    expected_type = zipfile.Path if library_path.suffix == ".zip" else pathlib.Path
+    assert isinstance(resolved_path, expected_type)
+
+
+def test_read_index_finds_all_sampling_datatables(library_path) -> None:
+    sampling_datatables = splib07_index._read_toc_sampling_paths(
+        splib07_index._resolve_zip_path(library_path)
+        / "indexes"
+        / "table_of_contents.html"
+    )
+
+    assert len(sampling_datatables) == len(splib07_index.Sampling)
+
+
+def test_generate_index_finds_all_entries(generated_index) -> None:
+    # Check that there is an index for every available sampling.
+    assert len(generated_index._sampling_indices) == len(splib07_index.Sampling)
+
+    for sampling_index in generated_index._sampling_indices.values():
+        chapter_lengths = tuple(map(len, sampling_index))
+
+        # Check that each sampling contains the expected number of spectra in each chapter.
+        assert chapter_lengths == _EXPECTED_CHAPTER_LENGTHS
