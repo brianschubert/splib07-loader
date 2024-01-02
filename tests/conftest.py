@@ -15,7 +15,11 @@ USGS_ARCHIVE_DIR: Final = DATA_DIR / "usgs_splib07"
 USGS_ARCHIVE_ZIP: Final = DATA_DIR / "usgs_splib07.zip"
 
 
-@pytest.fixture(params=[USGS_ARCHIVE_DIR, USGS_ARCHIVE_ZIP], ids=["directory", "zip"])
+@pytest.fixture(
+    params=[USGS_ARCHIVE_DIR, USGS_ARCHIVE_ZIP],
+    ids=["directory", "zip"],
+    scope="session",
+)
 def library_path(request) -> pathlib.Path:
     path = pathlib.Path(request.param)
 
