@@ -8,9 +8,7 @@ import lzma
 import pathlib
 import pickle
 import re
-import sys
-import zipfile
-from typing import Final, Literal, Mapping, NamedTuple, overload
+from typing import Final, Literal, Mapping, MutableMapping, NamedTuple, overload
 import importlib.resources
 
 import bs4
@@ -21,7 +19,7 @@ from splib07._util import PathLike, VirtualPath, resolve_zip_path
 _SpectrumIdentifier: TypeAlias = str
 """Unique identifier for a particular spectrum, shared across all available samplings."""
 
-_ChapterIndex: TypeAlias = dict[_SpectrumIdentifier, "_SpectrumEntry"]
+_ChapterIndex: TypeAlias = MutableMapping[_SpectrumIdentifier, "_SpectrumEntry"]
 """Mapping of all spectra contained in a chapter."""
 
 _SPACES_PATTERN: Final = re.compile(" +")
@@ -114,6 +112,10 @@ class _SamplingIndex(NamedTuple):
     artificial: _ChapterIndex
     vegetation: _ChapterIndex
 
+    @property
+    def all_chapters(self) -> _ChapterIndex:
+        return collections.ChainMap(*self)
+
 
 class _SpectrumEntry(NamedTuple):
     """
@@ -137,7 +139,7 @@ class _SpectrumEntry(NamedTuple):
 
 @functools.cache
 def load_cached_index() -> Splib07Index:
-    index_file = importlib.resources.files(__package__).joinpath("index.pickle")
+    index_file = importlib.resources.files(__package__).joinpath("index.pickle.xz")
 
     with index_file.open("rb") as temp, lzma.open(temp) as fd:
         return pickle.load(fd)  # type: ignore
