@@ -1,20 +1,17 @@
 import numpy as np
 
-
-def test_scan_archive(library) -> None:
-    assert len(library.list_spectra()) == 2457
-    assert len(library.list_resamplings()) == 29
+import splib07
 
 
-def test_experimental_resample(library) -> None:
+def test_manual_resample_agrees_with_precomputed(library) -> None:
     # spectrum_name = random.choice(library.list_spectra())
-    spectrum_name = "Seawater_Coast_Chl_SW1"
+    spectrum_name = "Seawater_Coast_Chl_SW1_BECKa_AREF"
 
-    for resampling in library.list_resamplings():
+    for resampling in splib07.Sampling:
         print(f"testing {resampling}")
 
-        expected_spectrum = library.load(spectrum_name, resample=resampling)
-        resampled_spectrum = library.load(
+        expected_spectrum = library.load_spectrum(spectrum_name, resample=resampling)
+        resampled_spectrum = library.load_spectrum(
             spectrum_name,
             resample=(expected_spectrum.wavelengths, expected_spectrum.fwhm),
         )

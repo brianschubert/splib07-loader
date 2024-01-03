@@ -37,12 +37,6 @@ if TYPE_CHECKING:
 _DeletedChannelMarker: Final = -1.23e34
 _DeletedChannelRange: Final = (-1.23001e34, -1.22999e34)
 
-# Special names for the splib07a and splib07b resamplings.
-_RESAMPLING_FIXED_NAMES: Final = {
-    "measured": "splib07a",
-    "oversampled": "splib07b",
-}
-
 
 _FloatArray: TypeAlias = NDArray[Literal["*"], Float]
 
@@ -93,7 +87,7 @@ class Splib07:
         return [s for s in self.list_spectra() if regex.search(s) is not None]
 
     @overload
-    def load(
+    def load_spectrum(
         self,
         spectrum: SpectrumIdentifier,
         *,
@@ -103,18 +97,18 @@ class Splib07:
         ...
 
     @overload
-    def load(
+    def load_spectrum(
         self,
         spectrum: SpectrumIdentifier,
         *,
         resample: Sampling | _FloatArray | tuple[_FloatArray, _FloatArray],
         deleted: Literal["sigil", "nan", "drop"] = ...,
-        format: Literal["raw"] = ...,
+        format: Literal["tuple"] = ...,
     ) -> Spectrum:
         ...
 
     @overload
-    def load(
+    def load_spectrum(
         self,
         spectrum: SpectrumIdentifier,
         *,
@@ -124,7 +118,7 @@ class Splib07:
     ) -> spectral.io.envi.SpectralLibrary:
         ...
 
-    def load(
+    def load_spectrum(
         self,
         spectrum: SpectrumIdentifier,
         *,
@@ -132,29 +126,28 @@ class Splib07:
         | _FloatArray
         | tuple[_FloatArray, _FloatArray] = Sampling.MEASURED,
         deleted: Literal["sigil", "nan", "drop"] = "nan",
-        format: Literal["raw", "spectral"] = "raw",
+        format: Literal["tuple", "spectral"] = "tuple",
     ) -> Spectrum | spectral.io.envi.SpectralLibrary:
         """
         Load the given spectrum with the specified resampling.
         """
-        if spectrum not in self.list_spectra():
-            raise ValueError(f"unknown spectra {spectrum}")
+
+        if not isinstance(resample, (Sampling, _FloatArray, tuple)):
+            raise ValueError(
+                f"got unexpected type for resample: {type(resample)}, expected Sampling, array, or tuple[array, array]"
+            )
 
         if isinstance(resample, Sampling):
-            resample_source = resample
+            load_sampling = resample
         else:
-            resample_source = Sampling.OVERSAMPLED
+            load_sampling = Sampling.OVERSAMPLED
 
-        if deleted == "drop":
-            # TODO add logic for handling deleted bands when returning wavelengths/bandwidths.
-            raise NotImplementedError
-
-        loaded_spectrum = self._load(spectrum, resample_source, deleted)
+        loaded_spectrum = self._load(spectrum, load_sampling, deleted)
 
         if not isinstance(resample, Sampling):
             loaded_spectrum = _resample(loaded_spectrum, resample)
 
-        if format == "raw":
+        if format == "tuple":
             return loaded_spectrum
 
         if format == "spectral":
@@ -174,9 +167,13 @@ class Splib07:
         self,
         spectrum: str,
         resample_source: Sampling,
-        deleted: Literal["sigil", "nan", "drop"] = "nan",
+        deleted: Literal["sigil", "nan", "drop"],
     ) -> Spectrum:
-        entry = self._index._sampling_indices[resample_source].all_chapters[spectrum]
+        sampling_index = self._index._sampling_indices[resample_source]
+        try:
+            entry = sampling_index.all_chapters[spectrum]
+        except KeyError as ex:
+            raise ValueError(f"unknown spectra {spectrum}") from ex
 
         if entry.spectrum_asciidata is None:
             raise ValueError(
@@ -184,13 +181,25 @@ class Splib07:
             )
 
         with self._root.joinpath(entry.spectrum_asciidata).open("r") as fd:
-            spec_data = _load_asciidata(fd, deleted)
+            spec_data = _load_asciidata(fd)
 
         with self._root.joinpath(entry.wavelengths_asciidata).open("r") as fd:
-            wavelengths = _load_asciidata(fd, deleted)
+            wavelengths = _load_asciidata(fd)
 
         with self._root.joinpath(entry.bandpass_asciidata).open("r") as fd:
-            fwhm = _load_asciidata(fd, deleted)
+            fwhm = _load_asciidata(fd)
+
+        if deleted != "sigil":
+            deleted_mask = _usgs_deleted_mask(spec_data)
+
+            if deleted == "nan":
+                spec_data[deleted_mask] = np.nan
+
+            if deleted == "drop":
+                keep_mask = ~deleted_mask
+                spec_data = spec_data[keep_mask]
+                wavelengths = wavelengths[keep_mask]
+                fwhm = fwhm[keep_mask]
 
         return Spectrum(spec_data, wavelengths, fwhm)
 
@@ -198,26 +207,9 @@ class Splib07:
         return f"{self.__class__.__name__}({self._root!r})"
 
 
-def _load_asciidata(
-    file: pathlib.Path | TextIO,
-    deleted: Literal["sigil", "nan", "drop"] = "nan",
-) -> _FloatArray:
+def _load_asciidata(file: pathlib.Path | TextIO) -> _FloatArray:
     """Load array from ASCIIdata file."""
-    data = np.loadtxt(file, skiprows=1)
-
-    if deleted == "sigil":
-        return data
-
-    mask = _usgs_deleted_mask(data)
-
-    if deleted == "drop":
-        return data[~mask]
-
-    if deleted == "nan":
-        data[mask] = np.nan
-        return data
-
-    raise ValueError(f"unknown deleted behavior: {deleted}")
+    return np.loadtxt(file, skiprows=1)
 
 
 def _usgs_deleted_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
