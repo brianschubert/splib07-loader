@@ -16,10 +16,10 @@ from typing_extensions import Self, TypeAlias
 
 from splib07._util import PathLike, VirtualPath, resolve_zip_path
 
-_SpectrumIdentifier: TypeAlias = str
+SpectrumIdentifier: TypeAlias = str
 """Unique identifier for a particular spectrum, shared across all available samplings."""
 
-_ChapterIndex: TypeAlias = MutableMapping[_SpectrumIdentifier, "_SpectrumEntry"]
+_ChapterIndex: TypeAlias = MutableMapping[SpectrumIdentifier, "_SpectrumEntry"]
 """Mapping of all spectra contained in a chapter."""
 
 _SPACES_PATTERN: Final = re.compile(" +")
@@ -125,7 +125,7 @@ class _SpectrumEntry(NamedTuple):
     # some entries are missing spectra, error plots, or range plots
     # e.g. Landsat8 Ilmenite HS231.3B NIC4bcu
 
-    name: _SpectrumIdentifier
+    name: SpectrumIdentifier
     description: pathlib.PurePath
     spectrum_asciidata: pathlib.PurePath | None
     error_asciidata: pathlib.PurePath | None
