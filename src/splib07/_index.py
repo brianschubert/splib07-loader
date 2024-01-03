@@ -258,4 +258,4 @@ def _extract_link_path(tag: bs4.Tag, missing_ok: bool) -> pathlib.PurePath | Non
         if not missing_ok:
             raise ValueError(f"missing anchor in tag {tag}")
         return None
-    return pathlib.PurePath(anchor["href"])  # type: ignore
+    return pathlib.PurePath(anchor["href"].removeprefix("../"))  # type: ignore
