@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import argparse
+import collections
 import enum
 import functools
 import itertools
@@ -16,7 +16,7 @@ import importlib.resources
 import bs4
 from typing_extensions import Self, TypeAlias
 
-from splib07._util import VirtualPath
+from splib07._util import PathLike, VirtualPath, resolve_zip_path
 
 _SpectrumIdentifier: TypeAlias = str
 """Unique identifier for a particular spectrum, shared across all available samplings."""
@@ -89,8 +89,8 @@ class Splib07Index:
         self._sampling_indices = sampling_indices
 
     @classmethod
-    def generate_index(cls, library_root: str | pathlib.Path) -> Self:
-        root_path = _resolve_zip_path(library_root)
+    def generate_index(cls, library_root: PathLike) -> Self:
+        root_path = resolve_zip_path(library_root)
         sampling_datatables = _read_toc_sampling_paths(
             root_path / "indexes" / "table_of_contents.html"
         )
@@ -257,28 +257,3 @@ def _extract_link_path(tag: bs4.Tag, missing_ok: bool) -> pathlib.PurePath | Non
             raise ValueError(f"missing anchor in tag {tag}")
         return None
     return pathlib.PurePath(anchor["href"])  # type: ignore
-
-
-def _resolve_zip_path(path: str | pathlib.Path) -> VirtualPath:
-    resolved_path: VirtualPath
-    if zipfile.is_zipfile(path):
-        resolved_path = zipfile.Path(path, at="")
-    else:
-        resolved_path = pathlib.Path(path)
-
-    return resolved_path
-
-
-def _main(cli_args: list[str]) -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("library_path", type=pathlib.Path)
-    parser.add_argument("output_path", type=pathlib.Path)
-    args = parser.parse_args(cli_args)
-
-    index = Splib07Index.generate_index(args.library_path)
-    with lzma.open(args.output_path, "wb") as fd:
-        pickle.dump(index, fd)
-
-
-if __name__ == "__main__":
-    _main(sys.argv[1:])
