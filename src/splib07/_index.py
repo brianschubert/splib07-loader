@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import enum
+import functools
 import itertools
+import lzma
 import pathlib
+import pickle
 import re
+import sys
 import zipfile
-from typing import Final, Mapping, NamedTuple
+from typing import Final, Literal, Mapping, NamedTuple, overload
+import importlib.resources
 
 import bs4
 from typing_extensions import Self, TypeAlias
@@ -72,6 +78,33 @@ class Chapter(enum.IntEnum):
         return self.name[0]
 
 
+class Splib07Index:
+    """
+    Index of all spectra contained in an splib07 archive.
+    """
+
+    _sampling_indices: Mapping[Sampling, _SamplingIndex]
+
+    def __init__(self, sampling_indices: Mapping[Sampling, _SamplingIndex]) -> None:
+        self._sampling_indices = sampling_indices
+
+    @classmethod
+    def generate_index(cls, library_root: str | pathlib.Path) -> Self:
+        root_path = _resolve_zip_path(library_root)
+        sampling_datatables = _read_toc_sampling_paths(
+            root_path / "indexes" / "table_of_contents.html"
+        )
+
+        sampling_indices = {}
+
+        for sampling, datatable_path in sampling_datatables.items():
+            sampling_indices[sampling] = _read_datatable(
+                root_path.joinpath("indexes").joinpath(datatable_path)
+            )
+
+        return cls(sampling_indices)
+
+
 class _SamplingIndex(NamedTuple):
     minerals: _ChapterIndex
     soils_and_mixtures: _ChapterIndex
@@ -99,40 +132,15 @@ class _SpectrumEntry(NamedTuple):
     range_plot: pathlib.PurePath | None
     wavelength_plot: pathlib.PurePath
     bandpass_plot: pathlib.PurePath
-    extra_range_plots: tuple[
-        pathlib.PurePath | None,
-        pathlib.PurePath | None,
-        pathlib.PurePath | None,
-        pathlib.PurePath | None,
-        pathlib.PurePath | None,
-    ] | None
+    extra_range_plots: list[pathlib.PurePath | None]
 
 
-class Splib07Index:
-    """
-    Index of all spectra contained in a splib07 archive.
-    """
+@functools.cache
+def load_cached_index() -> Splib07Index:
+    index_file = importlib.resources.files(__package__).joinpath("index.pickle")
 
-    _sampling_indices: Mapping[Sampling, _SamplingIndex]
-
-    def __init__(self, sampling_indices: Mapping[Sampling, _SamplingIndex]) -> None:
-        self._sampling_indices = sampling_indices
-
-    @classmethod
-    def generate_index(cls, library_root: str | pathlib.Path) -> Self:
-        root_path = _resolve_zip_path(library_root)
-        sampling_datatables = _read_toc_sampling_paths(
-            root_path / "indexes" / "table_of_contents.html"
-        )
-
-        sampling_indices = {}
-
-        for sampling, datatable_path in sampling_datatables.items():
-            sampling_indices[sampling] = _read_datatable(
-                root_path.joinpath("indexes").joinpath(datatable_path)
-            )
-
-        return cls(sampling_indices)
+    with index_file.open("rb") as temp, lzma.open(temp) as fd:
+        return pickle.load(fd)  # type: ignore
 
 
 def _read_toc_sampling_paths(toc_path: VirtualPath) -> dict[Sampling, pathlib.PurePath]:
@@ -181,14 +189,6 @@ def _read_datatable(
 
     chapter_indices = _SamplingIndex(*({} for _ in range(len(Chapter))))
 
-    def extract_link_path(cell, missing_ok: bool) -> pathlib.PurePath | None:
-        anchor = cell.find("a")
-        if anchor is None:
-            if not missing_ok:
-                raise ValueError(f"missing anchor in cell {cell}")
-            return None
-        return pathlib.PurePath(anchor["href"])
-
     # First table is the header banner.
     # The remaining 7 datatables are the spectra chapters.
     for table, current_index in zip(table_tags[1:], chapter_indices):
@@ -216,21 +216,19 @@ def _read_datatable(
 
                 current_index[spectrum_identifier] = _SpectrumEntry(
                     name=spectrum_identifier,
-                    description=extract_link_path(description, False),
-                    spectrum_asciidata=extract_link_path(spectrum_asciidata, True),
-                    error_asciidata=extract_link_path(error_asciidata, True),
-                    wavelengths_asciidata=extract_link_path(
+                    description=_extract_link_path(description, False),
+                    spectrum_asciidata=_extract_link_path(spectrum_asciidata, True),
+                    error_asciidata=_extract_link_path(error_asciidata, True),
+                    wavelengths_asciidata=_extract_link_path(
                         wavelengths_asciidata, False
                     ),
-                    bandpass_asciidata=extract_link_path(bandpass_asciidata, False),
-                    range_plot=extract_link_path(range_plot, True),
-                    wavelength_plot=extract_link_path(wavelength_plot, False),
-                    bandpass_plot=extract_link_path(bandpass_plot, False),
-                    extra_range_plots=tuple(
-                        extract_link_path(p, True) for p in extra_plots
-                    )
-                    if extra_plots
-                    else None,
+                    bandpass_asciidata=_extract_link_path(bandpass_asciidata, False),
+                    range_plot=_extract_link_path(range_plot, True),
+                    wavelength_plot=_extract_link_path(wavelength_plot, False),
+                    bandpass_plot=_extract_link_path(bandpass_plot, False),
+                    extra_range_plots=[
+                        _extract_link_path(p, True) for p in extra_plots
+                    ],
                 )
             except ValueError as ex:
                 raise ValueError(
@@ -238,6 +236,27 @@ def _read_datatable(
                 ) from ex
 
     return chapter_indices
+
+
+@overload
+def _extract_link_path(
+    tag: bs4.Tag, missing_ok: Literal[True]
+) -> pathlib.PurePath | None:
+    ...
+
+
+@overload
+def _extract_link_path(tag: bs4.Tag, missing_ok: Literal[False]) -> pathlib.PurePath:
+    ...
+
+
+def _extract_link_path(tag: bs4.Tag, missing_ok: bool) -> pathlib.PurePath | None:
+    anchor = tag.find("a")
+    if anchor is None:
+        if not missing_ok:
+            raise ValueError(f"missing anchor in tag {tag}")
+        return None
+    return pathlib.PurePath(anchor["href"])  # type: ignore
 
 
 def _resolve_zip_path(path: str | pathlib.Path) -> VirtualPath:
@@ -248,3 +267,18 @@ def _resolve_zip_path(path: str | pathlib.Path) -> VirtualPath:
         resolved_path = pathlib.Path(path)
 
     return resolved_path
+
+
+def _main(cli_args: list[str]) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("library_path", type=pathlib.Path)
+    parser.add_argument("output_path", type=pathlib.Path)
+    args = parser.parse_args(cli_args)
+
+    index = Splib07Index.generate_index(args.library_path)
+    with lzma.open(args.output_path, "wb") as fd:
+        pickle.dump(index, fd)
+
+
+if __name__ == "__main__":
+    _main(sys.argv[1:])
