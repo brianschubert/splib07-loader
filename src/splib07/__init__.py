@@ -19,11 +19,11 @@ Tools for loading spectra from a local archive of the `USGS Spectral Library Ver
 
 import importlib.metadata
 
-from ._loader import Spectrum, Splib07
-from ._index import Sampling
+from ._common import Chapter, Sampling
+from ._loader import Spectrum, SpectrumIdentifier, Splib07
 
 # Distribution version, PEP-440 compatible.
 # Automatically retrieved from installed distribution metadata.
 __version__ = importlib.metadata.version("splib07-loader")
 
-__all__ = ["Spectrum", "Splib07", "Sampling"]
+__all__ = ["Sampling", "Chapter", "Spectrum", "Splib07", "SpectrumIdentifier"]

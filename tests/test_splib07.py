@@ -1,6 +1,7 @@
 import numpy as np
 
 import splib07
+import splib07._util
 
 
 def test_manual_resample_agrees_with_precomputed(library) -> None:

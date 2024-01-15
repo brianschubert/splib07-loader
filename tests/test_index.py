@@ -6,6 +6,7 @@ from typing import Final
 import pytest
 
 import splib07
+import splib07._index
 import splib07._util
 
 _EXPECTED_CHAPTER_LENGTHS: Final = (1275, 208, 11, 23, 359, 289, 285)
@@ -46,12 +47,12 @@ def test_read_index_finds_all_sampling_datatables(library_path) -> None:
         / "table_of_contents.html"
     )
 
-    assert len(sampling_datatables) == len(splib07._index.Sampling)
+    assert len(sampling_datatables) == len(splib07.Sampling)
 
 
 def test_generate_index_finds_all_entries(index, library_path) -> None:
     # Check that there is an index for every available sampling.
-    assert len(index._sampling_indices) == len(splib07._index.Sampling)
+    assert len(index._sampling_indices) == len(splib07.Sampling)
 
     for sampling_index in index._sampling_indices.values():
         chapter_lengths = tuple(map(len, sampling_index))
