@@ -8,7 +8,15 @@ import lzma
 import pathlib
 import pickle
 import re
-from typing import Final, Literal, Mapping, MutableMapping, NamedTuple, overload
+from typing import (
+    Final,
+    Iterable,
+    Literal,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    overload,
+)
 import importlib.resources
 
 import bs4
@@ -60,6 +68,12 @@ class _SamplingIndex(NamedTuple):
     organics: _ChapterIndex
     artificial: _ChapterIndex
     vegetation: _ChapterIndex
+
+    def only_chapters(self, chapters: Chapter | Iterable[Chapter]) -> _ChapterIndex:
+        if isinstance(chapters, Chapter):
+            return self[chapters.value - 1]
+        else:
+            return collections.ChainMap(*[self[c.value - 1] for c in chapters])
 
     @property
     def all_chapters(self) -> _ChapterIndex:

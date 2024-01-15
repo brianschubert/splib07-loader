@@ -17,15 +17,19 @@ from __future__ import annotations
 import importlib
 import pathlib
 import re
-from functools import cache
-from typing import TYPE_CHECKING, Final, Literal, NamedTuple, TextIO, overload
+from typing import Iterable, TYPE_CHECKING, Final, Literal, NamedTuple, TextIO, overload
 
 import numpy as np
 import spectral
 from nptyping import Bool, Float, NDArray
 from typing_extensions import TypeAlias
 
-from ._index import Splib07Index, Sampling, load_cached_index, SpectrumIdentifier
+from ._index import (
+    Splib07Index,
+    load_cached_index,
+)
+
+from ._common import SpectrumIdentifier, Sampling, Chapter
 from ._util import PathLike, VirtualPath, resolve_zip_path
 
 if TYPE_CHECKING:
@@ -67,16 +71,26 @@ class Splib07:
         _assert_splib07_path(root_path)
         self._root = root_path
 
-    @cache
-    def list_spectra(self) -> list[str]:
+    def list_spectra(
+        self, chapters: Chapter | Iterable[Chapter] | None = None
+    ) -> list[str]:
         """
         Return list of all available spectra names.
         """
-        return list(
-            self._index._sampling_indices[Sampling.MEASURED].all_chapters.keys()
-        )
+        sampling_index = self._index._sampling_indices[Sampling.MEASURED]
 
-    def search_spectra(self, pattern: str | re.Pattern[str]) -> list[str]:
+        if chapters is None:
+            chapter_index = sampling_index.all_chapters
+        else:
+            chapter_index = sampling_index.only_chapters(chapters)
+
+        return list(chapter_index.keys())
+
+    def search_spectra(
+        self,
+        pattern: str | re.Pattern[str],
+        chapters: Chapter | Iterable[Chapter] | None = None,
+    ) -> list[str]:
         """
         Return list of all spectra names that match the given pattern.
         """
@@ -84,7 +98,7 @@ class Splib07:
             regex = pattern
         else:
             regex = re.compile(pattern, re.IGNORECASE)
-        return [s for s in self.list_spectra() if regex.search(s) is not None]
+        return [s for s in self.list_spectra(chapters) if regex.search(s) is not None]
 
     @overload
     def load_spectrum(
