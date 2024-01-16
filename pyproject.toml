@@ -27,6 +27,7 @@ pytest = "^7.4.0"
 [tool.poetry.group.nb.dependencies]
 jupyter = "^1.0.0"
 nbqa = "^1.7.0"
+matplotlib = "^3.8.2"
 
 [build-system]
 requires = ["poetry-core"]
