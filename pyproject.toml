@@ -5,6 +5,14 @@ description = "Tools for loading spectra from a local archive of the USGS Spectr
 license = "Apache-2.0"
 authors = ["Brian Schubert <schubert.b@northeastern.edu>"]
 readme = "README.md"
+repository = "https://github.com/brianschubert/splib07-loader"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
+]
+
 packages = [
     { from = "src", include = "splib07" }
 ]
@@ -22,7 +30,6 @@ black = "^23.7.0"
 isort = "^5.12.0"
 mypy = "^1.4.1"
 pytest = "^7.4.0"
-
 
 [tool.poetry.group.nb.dependencies]
 jupyter = "^1.0.0"
