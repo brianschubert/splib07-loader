@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO, 
 import numpy as np
 import spectral
 from nptyping import Bool, Float, NDArray
-from typing_extensions import TypeAlias
+from typing_extensions import TypeAlias, deprecated
 
 from ._common import Chapter, Sampling, SpectrumIdentifier
 from ._index import Splib07Index, load_cached_index
@@ -95,6 +95,54 @@ class Splib07:
         else:
             regex = re.compile(pattern, re.IGNORECASE)
         return [s for s in self.list_spectra(chapters) if regex.search(s) is not None]
+
+    @deprecated(
+        "'Splib07.load' is deprecated, use 'Splib07.load_spectrum' instead. 'Splib07.load_spectrum' implements a new"
+        " interface that allows the library to be searched much faster, but uses slightly different identifiers for the"
+        " library spectra. Use 'Splib07.search_spectra' to find the new identifier for a spectrum that 'Splib07.load'"
+        " could load. The current implementation of 'Splib07.load' attempts to reimplement the old behavior of "
+        " 'Splib07.load' terms of 'Splib07.load_spectrum'. If you run into issues with using this implementation of "
+        " 'Splib07.load' or with migrating to 'Splib07.load_spectrum', consider downgrading to 'splib07-loader==0.4.0'."
+    )
+    def load(
+        self,
+        spectra_name: str,
+        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        *,
+        deleted: Literal["sigil", "nan", "drop"] = "nan",
+        format: Literal["raw", "spectral"] = "raw",
+    ) -> Spectrum | spectral.io.envi.SpectralLibrary:
+        candidates = [
+            name for name in self.list_spectra() if name.startswith(spectra_name)
+        ]
+
+        try:
+            [resolved_name] = candidates
+        except ValueError:
+            raise ValueError(
+                f"old spectra prefix {spectra_name} matched {len(candidates)}"
+                f" spectrum identifiers - match must be unique"
+            )
+
+        resolved_resample: Sampling | _FloatArray | tuple[_FloatArray, _FloatArray]
+        if isinstance(resample, str):
+            if resample == "measured":
+                resolved_resample = Sampling.MEASURED
+            elif resample == "oversampled":
+                resolved_resample = Sampling.OVERSAMPLED
+            else:
+                resolved_resample = Sampling(f"splib07b_{resample}")
+        else:
+            resolved_resample = resample
+
+        resolved_format = {"raw": "tuple", "spectral": "spectral"}[format]
+
+        return self.load_spectrum(  # type: ignore
+            resolved_name,
+            resample=resolved_resample,
+            deleted=deleted,
+            format=resolved_format,
+        )
 
     @overload
     def load_spectrum(
