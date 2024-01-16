@@ -17,14 +17,16 @@ from __future__ import annotations
 import importlib
 import pathlib
 import re
-import zipfile
-from functools import cache
 from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO, overload
 
 import numpy as np
 import spectral
 from nptyping import Bool, Float, NDArray
 from typing_extensions import TypeAlias
+
+from ._common import Chapter, Sampling, SpectrumIdentifier
+from ._index import Splib07Index, load_cached_index
+from ._util import PathLike, VirtualPath, resolve_zip_path
 
 if TYPE_CHECKING:
     import spectral.io.envi
@@ -35,13 +37,6 @@ if TYPE_CHECKING:
 _DeletedChannelMarker: Final = -1.23e34
 _DeletedChannelRange: Final = (-1.23001e34, -1.22999e34)
 
-# Special names for the splib07a and splib07b resamplings.
-_RESAMPLING_FIXED_NAMES: Final = {
-    "measured": "splib07a",
-    "oversampled": "splib07b",
-}
-
-_VirtualPath: TypeAlias = "pathlib.Path | zipfile.Path"
 
 _FloatArray: TypeAlias = NDArray[Literal["*"], Float]
 
@@ -57,119 +52,112 @@ class Splib07:
     Interface to a local archive of the USGS Spectral Library Version 7.
     """
 
-    root: _VirtualPath
+    _root: VirtualPath
     """
     Path to directory containing the extracted USGS Spectral Library Version 7 files.
     """
 
-    def __init__(self, root: str | pathlib.Path) -> None:
-        path: _VirtualPath
-        if zipfile.is_zipfile(root):
-            path = zipfile.Path(root, at="")
-        else:
-            path = pathlib.Path(root)
+    _index: Splib07Index
 
-        _assert_splib07_path(path)
-        self.root = path
+    def __init__(self, root: PathLike, index: Splib07Index | None = None) -> None:
+        root_path = resolve_zip_path(root)
 
-    @cache
-    def list_spectra(self) -> list[str]:
+        self._index = load_cached_index() if index is None else index
+
+        _assert_splib07_path(root_path)
+        self._root = root_path
+
+    def list_spectra(
+        self, chapters: Chapter | Iterable[Chapter] | None = None
+    ) -> list[str]:
         """
         Return list of all available spectra names.
         """
-        measured_dir = self.root.joinpath("ASCIIdata").joinpath("ASCIIdata_splib07a")
-        spectra_basenames = [
-            "_".join(f.name.split("_")[1:-2]) for f in _scan_spectra(measured_dir)
-        ]
-        spectra_basenames.sort()
-        return spectra_basenames
+        sampling_index = self._index._sampling_indices[Sampling.MEASURED]
 
-    @cache
-    def list_resamplings(self) -> list[str]:
-        """
-        Return list of all available resamplings.
-        """
-        named_resamplings = [
-            d.name.removeprefix("ASCIIdata_splib07b_")
-            for d in self.root.joinpath("ASCIIdata").iterdir()
-            if d.name.startswith("ASCIIdata_splib07b_")
-        ]
-        return list(_RESAMPLING_FIXED_NAMES.keys()) + named_resamplings
+        if chapters is None:
+            chapter_index = sampling_index.all_chapters
+        else:
+            chapter_index = sampling_index.only_chapters(chapters)
 
-    def search_spectra(self, regex: str | re.Pattern[str]) -> list[str]:
+        return list(chapter_index.keys())
+
+    def search_spectra(
+        self,
+        pattern: str | re.Pattern[str],
+        chapters: Chapter | Iterable[Chapter] | None = None,
+    ) -> list[str]:
         """
         Return list of all spectra names that match the given pattern.
         """
-        if isinstance(regex, re.Pattern):
-            pattern = regex
+        if isinstance(pattern, re.Pattern):
+            regex = pattern
         else:
-            pattern = re.compile(regex, re.IGNORECASE)
-        return [s for s in self.list_spectra() if pattern.search(s) is not None]
+            regex = re.compile(pattern, re.IGNORECASE)
+        return [s for s in self.list_spectra(chapters) if regex.search(s) is not None]
 
     @overload
-    def load(
+    def load_spectrum(
         self,
-        spectra_name: str,
-        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        spectrum: SpectrumIdentifier,
         *,
+        resample: Sampling | _FloatArray | tuple[_FloatArray, _FloatArray],
         deleted: Literal["sigil", "nan", "drop"] = ...,
     ) -> Spectrum:
         ...
 
     @overload
-    def load(
+    def load_spectrum(
         self,
-        spectra_name: str,
-        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        spectrum: SpectrumIdentifier,
         *,
+        resample: Sampling | _FloatArray | tuple[_FloatArray, _FloatArray],
         deleted: Literal["sigil", "nan", "drop"] = ...,
-        format: Literal["raw"] = ...,
+        format: Literal["tuple"] = ...,
     ) -> Spectrum:
         ...
 
     @overload
-    def load(
+    def load_spectrum(
         self,
-        spectra_name: str,
-        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        spectrum: SpectrumIdentifier,
         *,
+        resample: Sampling | _FloatArray | tuple[_FloatArray, _FloatArray],
         deleted: Literal["sigil", "nan", "drop"] = ...,
         format: Literal["spectral"] = ...,
     ) -> spectral.io.envi.SpectralLibrary:
         ...
 
-    def load(
+    def load_spectrum(
         self,
-        spectra_name: str,
-        resample: str | _FloatArray | tuple[_FloatArray, _FloatArray],
+        spectrum: SpectrumIdentifier,
         *,
+        resample: Sampling
+        | _FloatArray
+        | tuple[_FloatArray, _FloatArray] = Sampling.MEASURED,
         deleted: Literal["sigil", "nan", "drop"] = "nan",
-        format: Literal["raw", "spectral"] = "raw",
+        format: Literal["tuple", "spectral"] = "tuple",
     ) -> Spectrum | spectral.io.envi.SpectralLibrary:
         """
         Load the given spectrum with the specified resampling.
         """
-        if spectra_name not in self.list_spectra():
-            raise ValueError(f"unknown spectra {spectra_name}")
 
-        if isinstance(resample, str):
-            resample_source = resample
+        if not isinstance(resample, (Sampling, np.ndarray, tuple)):
+            raise ValueError(
+                f"got unexpected type for resample: {type(resample)}, expected Sampling, array, or tuple[array, array]"
+            )
+
+        if isinstance(resample, Sampling):
+            load_sampling = resample
         else:
-            resample_source = "oversampled"
+            load_sampling = Sampling.OVERSAMPLED
 
-        if resample_source not in self.list_resamplings():
-            raise ValueError(f"unknown resampling {resample_source}")
+        loaded_spectrum = self._load(spectrum, load_sampling, deleted)
 
-        if deleted == "drop":
-            # TODO add logic for handling deleted bands when returning wavelengths/bandwidths.
-            raise NotImplementedError
-
-        loaded_spectrum = self._load(spectra_name, resample_source, deleted)
-
-        if not isinstance(resample, str):
+        if not isinstance(resample, Sampling):
             loaded_spectrum = _resample(loaded_spectrum, resample)
 
-        if format == "raw":
+        if format == "tuple":
             return loaded_spectrum
 
         if format == "spectral":
@@ -179,7 +167,7 @@ class Splib07:
                     "wavelength": loaded_spectrum.wavelengths,
                     "fwhm": loaded_spectrum.fwhm,
                     "wavelength units": "micrometer",
-                    "spectra names": [spectra_name],
+                    "spectra names": [spectrum],
                 },
             )
 
@@ -187,119 +175,51 @@ class Splib07:
 
     def _load(
         self,
-        spectra_name: str,
-        resample_source: str,
-        deleted: Literal["sigil", "nan", "drop"] = "nan",
+        spectrum: str,
+        resample_source: Sampling,
+        deleted: Literal["sigil", "nan", "drop"],
     ) -> Spectrum:
-        resampling_label = _RESAMPLING_FIXED_NAMES.get(
-            resample_source, f"splib07b_{resample_source}"
-        )
-        resampling_dir = self.root.joinpath("ASCIIdata").joinpath(
-            f"ASCIIdata_{resampling_label}"
-        )
+        sampling_index = self._index._sampling_indices[resample_source]
+        try:
+            entry = sampling_index.all_chapters[spectrum]
+        except KeyError as ex:
+            raise ValueError(f"unknown spectra {spectrum}") from ex
 
-        # TODO direct lookup from file format instead of manually searching.
-        for file in _scan_spectra(resampling_dir):
-            if spectra_name in file.name:
-                with file.open("r") as fd:
-                    spectra = _load_asciidata(fd, deleted)  # type: ignore
-                break
-        else:
-            # Should never happen.
-            raise RuntimeError(
-                f"missing {resample_source} resampling for {spectra_name} - is the splib07 data directory incomplete?"
+        if entry.spectrum_asciidata is None:
+            raise ValueError(
+                f"spectrum '{spectrum}' missing spectrum data in '{resample_source.value}'"
             )
 
-        # TODO test stability.
-        # TODO tidy wavelength matching hack.
-        # We use the first four letters of the second to last component in the spectrum's
-        # filename identify its associated wavelength/bandwidth files.
-        sampling_label = file.name.split("_")[-2][:4]
+        with self._root.joinpath(entry.spectrum_asciidata).open("r") as fd:
+            spec_data = _load_asciidata(fd)
 
-        # Attempt to locate the associated FWHM bandwidths file.
-        fwhm_candidates = [
-            f
-            for f in resampling_dir.iterdir()
-            if f.name.endswith(".txt")
-            and ("andpass" in f.name or "esolution" in f.name)
-            and not f.name.endswith("_nm.txt")
-        ]
-        if len(fwhm_candidates) > 1:
-            fwhm_candidates = [f for f in fwhm_candidates if sampling_label in f.name]
-        if len(fwhm_candidates) != 1:
-            raise RuntimeError(
-                f"could not determine bandwidths/FWHMs for {spectra_name} "
-                f"with resampling {resample_source}"
-            )
-        with fwhm_candidates[0].open("r") as fd:
-            fwhm = _load_asciidata(fd, deleted)  # type: ignore
+        with self._root.joinpath(entry.wavelengths_asciidata).open("r") as fd:
+            wavelengths = _load_asciidata(fd)
 
-        # Attempt to locate the associated wavelengths file.
-        wavelength_candidates = [
-            f
-            for f in resampling_dir.iterdir()
-            if f.name.endswith(".txt")
-            and ("avelength" in f.name or "aves" in f.name)
-            and not f.name.endswith("_SRFs.txt")
-            and not f.name.endswith("Function.txt")
-            and not f.name.endswith("Functions.txt")
-        ]
-        if len(wavelength_candidates) > 1:
-            wavelength_candidates = [
-                f for f in wavelength_candidates if sampling_label in f.name
-            ]
-        if len(wavelength_candidates) != 1:
-            # Special case - ASD{HR,NG} in splib07{a,b}
-            if sampling_label.startswith("ASD"):
-                wavelength_candidates = [
-                    resampling_dir.joinpath(
-                        "splib07b_Wavelengths_ASDFR_0.35-2.5microns_2151ch.txt"
-                        if resample_source == "oversampled"
-                        else "splib07a_Wavelengths_ASD_0.35-2.5_microns_2151_ch.txt"
-                    )
-                ]
-            else:
-                raise RuntimeError(
-                    f"could not determine wavelengths for {spectra_name} "
-                    f"with resampling {resample_source}"
-                )
-        with wavelength_candidates[0].open("r") as fd:
-            wavelengths = _load_asciidata(fd, deleted)  # type: ignore
+        with self._root.joinpath(entry.bandpass_asciidata).open("r") as fd:
+            fwhm = _load_asciidata(fd)
 
-        return Spectrum(spectra, wavelengths, fwhm)
+        if deleted != "sigil":
+            deleted_mask = _usgs_deleted_mask(spec_data)
+
+            if deleted == "nan":
+                spec_data[deleted_mask] = np.nan
+
+            if deleted == "drop":
+                keep_mask = ~deleted_mask
+                spec_data = spec_data[keep_mask]
+                wavelengths = wavelengths[keep_mask]
+                fwhm = fwhm[keep_mask]
+
+        return Spectrum(spec_data, wavelengths, fwhm)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.root!r})"
+        return f"{self.__class__.__name__}({self._root!r})"
 
 
-def _scan_spectra(path: _VirtualPath) -> Iterable[_VirtualPath]:
-    """Iterate the spectrum files in the specified resampling directory."""
-    for directory in path.iterdir():
-        if not directory.name.startswith("Chapter"):
-            continue
-        yield from directory.iterdir()
-
-
-def _load_asciidata(
-    file: pathlib.Path | TextIO,
-    deleted: Literal["sigil", "nan", "drop"] = "nan",
-) -> _FloatArray:
+def _load_asciidata(file: pathlib.Path | TextIO) -> _FloatArray:
     """Load array from ASCIIdata file."""
-    data = np.loadtxt(file, skiprows=1)
-
-    if deleted == "sigil":
-        return data
-
-    mask = _usgs_deleted_mask(data)
-
-    if deleted == "drop":
-        return data[~mask]
-
-    if deleted == "nan":
-        data[mask] = np.nan
-        return data
-
-    raise ValueError(f"unknown deleted behavior: {deleted}")
+    return np.loadtxt(file, skiprows=1)
 
 
 def _usgs_deleted_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
@@ -307,7 +227,7 @@ def _usgs_deleted_mask(arr: _FloatArray) -> NDArray[Literal["*"], Bool]:
     return _mask_in_range(arr, *_DeletedChannelRange)
 
 
-def _assert_splib07_path(path: _VirtualPath) -> None:
+def _assert_splib07_path(path: VirtualPath) -> None:
     """
     Validate that the given directory contains Spectral Library Version 7 files.
     """
