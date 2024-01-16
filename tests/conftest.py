@@ -24,7 +24,10 @@ def library_path(request) -> pathlib.Path:
     path = pathlib.Path(request.param)
 
     if not path.exists():
-        pytest.skip(f"splib07 {request.node.callspec.id} not found at '{path}'")
+        # Note: can't use 'request.node.callspec.id' to get ID for when using session scope.
+        variant = "zip" if path.suffix == ".zip" else "directory"
+
+        pytest.skip(f"splib07 {variant} not found at '{path}'")
 
     return path
 
