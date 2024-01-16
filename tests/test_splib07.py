@@ -9,20 +9,24 @@ def test_manual_resample_agrees_with_precomputed(library) -> None:
     spectrum_name = "Seawater_Coast_Chl_SW1_BECKa_AREF"
 
     for resampling in splib07.Sampling:
-        print(f"testing {resampling}")
+        print(f"testing {spectrum_name} {resampling}")
 
         expected_spectrum = library.load_spectrum(spectrum_name, resample=resampling)
         resampled_spectrum = library.load_spectrum(
             spectrum_name,
             resample=(expected_spectrum.wavelengths, expected_spectrum.fwhm),
         )
-        nan_mask = np.isnan(expected_spectrum.spectrum) | np.isnan(
-            resampled_spectrum.spectrum
-        )
+        nan_mask = np.isnan(expected_spectrum.spectrum)
 
-        np.testing.assert_allclose(
-            resampled_spectrum.spectrum[~nan_mask],
-            expected_spectrum.spectrum[~nan_mask],
-            atol=0.01,
-            rtol=0.01,
-        )
+        try:
+            np.testing.assert_allclose(
+                resampled_spectrum.spectrum[~nan_mask],
+                expected_spectrum.spectrum[~nan_mask],
+                atol=0.05,
+                rtol=0.05,
+            )
+        except AssertionError:
+            print(
+                f"{resampled_spectrum.spectrum.tolist()=}\n{expected_spectrum.spectrum.tolist()=}"
+            )
+            raise

@@ -17,19 +17,15 @@ from __future__ import annotations
 import importlib
 import pathlib
 import re
-from typing import Iterable, TYPE_CHECKING, Final, Literal, NamedTuple, TextIO, overload
+from typing import TYPE_CHECKING, Final, Iterable, Literal, NamedTuple, TextIO, overload
 
 import numpy as np
 import spectral
 from nptyping import Bool, Float, NDArray
 from typing_extensions import TypeAlias
 
-from ._index import (
-    Splib07Index,
-    load_cached_index,
-)
-
-from ._common import SpectrumIdentifier, Sampling, Chapter
+from ._common import Chapter, Sampling, SpectrumIdentifier
+from ._index import Splib07Index, load_cached_index
 from ._util import PathLike, VirtualPath, resolve_zip_path
 
 if TYPE_CHECKING:
@@ -146,7 +142,7 @@ class Splib07:
         Load the given spectrum with the specified resampling.
         """
 
-        if not isinstance(resample, (Sampling, _FloatArray, tuple)):
+        if not isinstance(resample, (Sampling, np.ndarray, tuple)):
             raise ValueError(
                 f"got unexpected type for resample: {type(resample)}, expected Sampling, array, or tuple[array, array]"
             )
