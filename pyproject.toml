@@ -1,10 +1,18 @@
 [tool.poetry]
 name = "splib07-loader"
-version = "0.4.0"
+version = "0.5.0"
 description = "Tools for loading spectra from a local archive of the USGS Spectral Library Version 7"
 license = "Apache-2.0"
 authors = ["Brian Schubert <schubert.b@northeastern.edu>"]
 readme = "README.md"
+repository = "https://github.com/brianschubert/splib07-loader"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
+]
+
 packages = [
     { from = "src", include = "splib07" }
 ]
@@ -15,6 +23,7 @@ numpy = "^1.25.1"
 typing-extensions = "^4.7.1"
 nptyping = "^2.5.0"
 spectral = "^0.23.1"
+beautifulsoup4 = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
@@ -22,10 +31,10 @@ isort = "^5.12.0"
 mypy = "^1.4.1"
 pytest = "^7.4.0"
 
-
 [tool.poetry.group.nb.dependencies]
 jupyter = "^1.0.0"
 nbqa = "^1.7.0"
+matplotlib = "^3.8.2"
 
 [build-system]
 requires = ["poetry-core"]
@@ -54,3 +63,7 @@ strict = true
 [[tool.mypy.overrides]]
 module = "spectral.*"
 ignore_missing_imports = true
+
+# pytest config.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
