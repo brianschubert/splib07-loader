@@ -1,0 +1,87 @@
+# Build and test a set of distribution files.
+
+name: Build
+
+on: [ workflow_call, workflow_dispatch ]
+
+jobs:
+
+  build:
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install build frontend
+        # language=sh
+        run: python -m pip install --upgrade pip build
+
+      - name: Build distribution files
+        # language=sh
+        run: python -I -m build
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  check:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+
+      # Makes sure that the installed distribution is from the wheels that were just built and not downloaded from PyPI.
+      #   --no-index    - only search './dist' (not PyPI)
+      #   --only-binary - use a wheel (not sdist)
+      #   --no-deps     - only install named distribution (do not try to find other dependencies)
+      - name: Install candidate wheel without dependencies
+        # language=sh
+        run: python -m pip install --no-index --only-binary ':all:' --no-deps --find-links=dist splib07-loader
+
+      # Install remaining dependency from PyPI
+      # The construct `| tee /dev/tty | grep ...` preserves stdout for the log while also producing an error exit
+      # status if `...` is not found in the output.
+      - name: Install candidate wheel's dependencies from PyPI
+        if: ${{ !contains(matrix.os, 'windows') }}
+        # language=sh
+        run: |
+          python -m pip install --find-links=dist splib07-loader | tee /dev/tty | grep 'Requirement already satisfied: splib07-loader' > /dev/null
+
+      - name: Install candidate wheel's dependencies from PyPI (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        # language=sh
+        run: |
+          $output = python -m pip install --find-links=dist splib07-loader | Out-String
+          Write-Host $output
+          exit [int]$($output -notmatch 'Requirement already satisfied: splib07-loader')
+
+      - uses: actions/checkout@v3
+        with:
+          sparse-checkout: tests
+
+      - name: Run pytest
+        # language=sh
+        run: |
+          python -m pip install pytest
+          pytest

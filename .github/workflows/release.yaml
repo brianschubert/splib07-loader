@@ -1,0 +1,138 @@
+# Build, test, and publish built distributions to {Test,}PyPI on tag push.
+
+name: Release
+
+run-name: Release from ${{ github.ref }}
+
+on:
+  push:
+    tags:
+      # Only trigger on release tags (including "dev" and "release candidates").
+      # NOTE: keep in sync with the filter in "publish" job below.
+      - v[0-9]+.[0-9]+.[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+.dev[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+rc[0-9]+
+
+jobs:
+
+  build:
+    uses: ./.github/workflows/build.yaml
+
+  # Publish the release to TestPyPI (https://test.pypi.org).
+  test-publish:
+    needs: build
+#    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/splib07-loader
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Retrieve distributions
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+
+       # Verify that the version tag on all distribution files matches the pushed tag.
+      - name: Check version consistency
+        # language=sh
+        run: |
+          tag_prefix="refs/tags/v"
+          pushed_ref="${{ github.ref }}"
+          expected_version="${pushed_ref#${tag_prefix}}"
+          
+          echo "::notice:: expected version is ${expected_version} for ref ${pushed_ref}"
+          
+          for dist_file in ./dist/*; do
+              dist_version=$(echo ${dist_file%.tar.gz} | cut -d'-' -f2)
+            
+              echo "::debug:: found version ${dist_version} for file '${dist_file}'"
+          
+              if [ "${expected_version}" != "${dist_version}" ]; then
+                echo "::error:: expected ${expected_version}, got ${dist_version} in distribution file '${dist_file}'"
+                exit 1
+              fi
+          done
+
+      - name: Publish distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          print-hash: true
+
+  # Verify that the release just published to TestPyPI can be installed successfully with pip.
+  test-install:
+    needs: test-publish
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Install ONLY the released distribution from TestPyPI. Allow prereleases.
+      - name: Install distribution from TestPyPI
+        # language=sh
+        run: pip install --pre --no-deps -i https://test.pypi.org/simple/ splib07-loader
+
+      # Install all remaining dependencies from PyPI.
+      # Verify that pip does not attempt to re-install the distribution from the previous step.
+      - name: Install dependencies from PyPI
+        if: ${{ !contains(matrix.os, 'windows') }}
+        # language=sh
+        run: |
+          python -m pip install splib07-loader packaging | tee /dev/tty | grep 'Requirement already satisfied: splib07-loader' > /dev/null
+
+      # Windows version of the previous step.
+      - name: Install dependencies from PyPI (Windows)
+        if: ${{ contains(matrix.os, 'windows') }}
+        # language=sh
+        run: |
+          $output = python -m pip install splib07-loader packaging | Out-String
+          Write-Host $output
+          exit [int]$($output -notmatch 'Requirement already satisfied: splib07-loader')
+
+      - name: Verify that installed distribution version matches tag
+        shell: python
+        # language=python
+        run: |
+          import packaging.version
+          import splib07
+          
+          installed_version = packaging.version.parse(splib07.__version__)
+          expected_version = packaging.version.parse("${{ github.ref }}".split("/")[-1].removeprefix("v"))
+          
+          print(f"::notice::{installed_version=} {expected_version=}")
+          
+          assert installed_version.release == expected_version.release
+
+  # Publish the release to PyPI.
+  publish:
+    needs: test-install
+    # Only run on full release tags.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && !contains(github.ref, 'dev') && !contains(github.ref, 'rc')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/splib07-loader
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Retrieve distributions
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
